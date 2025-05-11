@@ -14,6 +14,12 @@ const config = {
         enforceInEEA: true         // Enforce consent mode in EEA countries
     },
     
+    // gcsConfig  add explicit GCS configuration
+      gcsConfig: {
+        enabled: true,
+        defaultSignal: 'G100', // Default to all denied
+        explicitSignals: true // Force explicit signal setting
+    },
     // Behavior configuration
     behavior: {
         autoShow: true,
@@ -1283,78 +1289,81 @@ let bannerTimer = null;
 let bannerShown = false;
 
 // Location data storage
-let locationData = {
-    continent: 'Unknown',
-    country: 'Unknown',
-    city: 'Unknown',
-    zip: 'Unknown',
-    ip: 'Unknown',
-    street: 'Unknown',
-    region: 'Unknown',
-    timezone: 'Unknown',
-    isp: 'Unknown',
-    language: 'Unknown'
-};
+// Location data storage with immediate initialization
+// Location data storage - start empty
+let locationData = {};
 
+// First try to load from session storage if available
+const savedLocation = sessionStorage.getItem('locationData');
+if (savedLocation) {
+    locationData = JSON.parse(savedLocation);
+} else {
+    // If no saved data, fetch fresh data
+    fetchLocationData().then(() => {
+        // Push to dataLayer after we have the data
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({
+            'event': 'locationInitialized',
+            'location_data': locationData,
+            'timestamp': new Date().toISOString()
+        });
+    });
+}
 // Function to fetch location data
 async function fetchLocationData() {
-    var apiKey = '4c1e5d00e0ac93'; // Replace with a valid API key if necessary
+    // Skip if we already have valid location data (optional safety check)
+    if (locationData.country && locationData.country !== 'Unknown') {
+        return locationData;
+    }
 
     try {
-        const response = await fetch('https://ipinfo.io/json?token=' + apiKey);
-        if (!response.ok) {
-            throw new Error('Failed to fetch location data from ipinfo.io');
-        }
+        const response = await fetch('https://ipinfo.io/json?token=4c1e5d00e0ac93');
+        if (!response.ok) throw new Error('Failed to fetch location');
+        
         const payload = await response.json();
+        
+        // Update locationData with actual values
+        locationData = {
+            continent: getContinentFromCountry(payload.country) || "Unknown",
+            country: payload.country || "Unknown",
+            city: payload.city || "Unknown",
+            zip: payload.postal || "Unknown",
+            ip: payload.ip || "Unknown",
+            street: payload.loc || "Unknown",
+            region: payload.region || "Unknown",
+            timezone: payload.timezone || "Unknown",
+            isp: payload.org || "Unknown",
+            language: (navigator.language || "Unknown").split("-")[0]
+        };
 
-        // Update locationData with payload or fallback values
-        locationData.country = payload.country || "Unknown";
-        locationData.city = payload.city || "Unknown";
-        locationData.zip = payload.postal || "Unknown";
-        locationData.ip = payload.ip || "Unknown";
-        locationData.street = payload.loc || "Unknown";
-        locationData.region = payload.region || "Unknown";
-        locationData.timezone = payload.timezone || "Unknown";
-        locationData.isp = payload.org || "Unknown";
-        locationData.language = (navigator.language || "Unknown").split("-")[0];
-        locationData.continent = getContinentFromCountry(locationData.country);
-
-        // Push to dataLayer
-        window.dataLayer = window.dataLayer || [];
+        // Save to session storage
+        sessionStorage.setItem('locationData', JSON.stringify(locationData));
+        
+        // Push to dataLayer - THIS IS WHERE IT HAPPENS NOW
         window.dataLayer.push({
             'event': 'locationRetrieved',
-            'continent': locationData.continent,
-            'country': locationData.country,
-            'city': locationData.city,
-            'zip': locationData.zip,
-            'ip': locationData.ip,
-            'street': locationData.street,
-            'region': locationData.region,
-            'timezone': locationData.timezone,
-            'isp': locationData.isp,
-            'language': locationData.language
+            'location_data': locationData,
+            'timestamp': new Date().toISOString()
         });
-
-        console.log('Location Data Sent to dataLayer:', locationData);
+        
+        return locationData;
+        
     } catch (error) {
         console.error('Error fetching location:', error);
-        // Ensure fallback values are set on error
-        locationData.country = "Unknown";
-        locationData.city = "Unknown";
-        locationData.zip = "Unknown";
-        locationData.ip = "Unknown";
-        locationData.street = "Unknown";
-        locationData.region = "Unknown";
-        locationData.timezone = "Unknown";
-        locationData.isp = "Unknown";
-        locationData.language = (navigator.language || "Unknown").split("-")[0];
-        locationData.continent = "Unknown";
-
-        window.dataLayer = window.dataLayer || [];
-        window.dataLayer.push({
-            'event': 'locationError',
-            'error': error.message
-        });
+        // Set defaults if API fails
+        locationData = {
+            continent: "Unknown",
+            country: "Unknown",
+            city: "Unknown",
+            zip: "Unknown",
+            ip: "Unknown",
+            street: "Unknown",
+            region: "Unknown",
+            timezone: "Unknown",
+            isp: "Unknown",
+            language: (navigator.language || "Unknown").split("-")[0]
+        };
+        return locationData;
     }
 }
 
@@ -3318,10 +3327,12 @@ function hideFloatingButton() {
 }
 
 // Cookie consent functions
+
+// Update the acceptAllCookies function
 function acceptAllCookies() {
     const consentData = {
         status: 'accepted',
-        gcs: 'G111',
+        gcs: 'G111', // Explicit GCS signal
         categories: {
             functional: true,
             analytics: true,
@@ -3340,7 +3351,7 @@ function acceptAllCookies() {
         updateConsentStats('accepted');
     }
     
-    // Push dataLayer event for consent acceptance with location data
+    // Push dataLayer event for consent acceptance with explicit GCS signal
     window.dataLayer.push({
         'event': 'cookie_consent_accepted',
         'consent_mode': {
@@ -3352,7 +3363,7 @@ function acceptAllCookies() {
             'functionality_storage': 'granted',
             'security_storage': 'granted'
         },
-        'gcs': 'G111',
+        'gcs': 'G111', // Explicit GCS signal
         'consent_status': 'accepted',
         'consent_categories': consentData.categories,
         'timestamp': new Date().toISOString(),
@@ -3360,10 +3371,11 @@ function acceptAllCookies() {
     });
 }
 
+// Update the rejectAllCookies function
 function rejectAllCookies() {
     const consentData = {
         status: 'rejected',
-        gcs: 'G100',
+        gcs: 'G100', // Explicit GCS signal
         categories: {
             functional: false,
             analytics: false,
@@ -3382,7 +3394,7 @@ function rejectAllCookies() {
         updateConsentStats('rejected');
     }
     
-    // Push dataLayer event for consent rejection with location data
+    // Push dataLayer event for consent rejection with explicit GCS signal
     window.dataLayer.push({
         'event': 'cookie_consent_rejected',
         'consent_mode': {
@@ -3394,7 +3406,7 @@ function rejectAllCookies() {
             'functionality_storage': 'denied',
             'security_storage': 'granted'
         },
-        'gcs': 'G100',
+        'gcs': 'G100', // Explicit GCS signal
         'consent_status': 'rejected',
         'consent_categories': consentData.categories,
         'timestamp': new Date().toISOString(),
@@ -3402,6 +3414,7 @@ function rejectAllCookies() {
     });
 }
 
+// Update the saveCustomSettings function
 function saveCustomSettings() {
     const analyticsChecked = document.querySelector('input[data-category="analytics"]').checked;
     const advertisingChecked = document.querySelector('input[data-category="advertising"]').checked;
@@ -3419,7 +3432,7 @@ function saveCustomSettings() {
 
     const consentData = {
         status: 'custom',
-        gcs: gcsSignal,
+        gcs: gcsSignal, // Explicit GCS signal
         categories: {
             functional: true,
             analytics: analyticsChecked,
@@ -3444,7 +3457,6 @@ function saveCustomSettings() {
         updateConsentStats('custom');
     }
     
-    // Push dataLayer event for custom consent settings with location data
     const consentStates = {
         'ad_storage': consentData.categories.advertising ? 'granted' : 'denied',
         'analytics_storage': consentData.categories.analytics ? 'granted' : 'denied',
@@ -3455,17 +3467,46 @@ function saveCustomSettings() {
         'security_storage': 'granted'
     };
     
-    window.dataLayer.push({
-        'event': 'cookie_consent_custom',
-        'consent_mode': consentStates,
-        'gcs': gcsSignal,
-        'consent_status': 'custom',
-        'consent_categories': consentData.categories,
-        'timestamp': new Date().toISOString(),
-        'location_data': locationData
-    });
+    // Fire specific events based on consent choices with explicit GCS signals
+    if (analyticsChecked && !advertisingChecked) {
+        window.dataLayer.push({
+            'event': 'analytics_cookie_accepted',
+            'consent_mode': {
+                'analytics_storage': 'granted',
+                'ad_storage': 'denied'
+            },
+            'gcs': 'G101', // Explicit GCS signal
+            'consent_status': 'custom',
+            'consent_categories': consentData.categories,
+            'timestamp': new Date().toISOString(),
+            'location_data': locationData
+        });
+    } else if (advertisingChecked && !analyticsChecked) {
+        window.dataLayer.push({
+            'event': 'marketing_cookie_accepted',
+            'consent_mode': {
+                'ad_storage': 'granted',
+                'analytics_storage': 'denied'
+            },
+            'gcs': 'G110', // Explicit GCS signal
+            'consent_status': 'custom',
+            'consent_categories': consentData.categories,
+            'timestamp': new Date().toISOString(),
+            'location_data': locationData
+        });
+    } else {
+        // For all other cases (both accepted or both rejected)
+        window.dataLayer.push({
+            'event': 'cookie_consent_custom',
+            'consent_mode': consentStates,
+            'gcs': gcsSignal, // Explicit GCS signal
+            'consent_status': 'custom',
+            'consent_categories': consentData.categories,
+            'timestamp': new Date().toISOString(),
+            'location_data': locationData
+        });
+    }
 }
-
 // Helper functions
 function clearNonEssentialCookies() {
     const cookies = document.cookie.split(';');
@@ -3509,6 +3550,7 @@ function loadCookiesAccordingToConsent(consentData) {
 }
 
 // Update consent mode for both Google and Microsoft UET
+// Update the updateConsentMode function to handle explicit GCS signals
 function updateConsentMode(consentData) {
     const consentStates = {
         'ad_storage': consentData.categories.advertising ? 'granted' : 'denied',
@@ -3533,12 +3575,15 @@ function updateConsentMode(consentData) {
         } else if (consentData.categories.analytics && consentData.categories.advertising) {
             gcsSignal = 'G111'; // Both granted (same as accept all)
         } else {
-            gcsSignal = ''; // Both denied (same as reject all)
+            gcsSignal = 'G100'; // Both denied (same as reject all)
         }
     }
 
-    // Update Google consent
-    gtag('consent', 'update', consentStates);
+    // Update Google consent with explicit GCS signal
+    gtag('consent', 'update', {
+        ...consentStates,
+        'gcs': gcsSignal // Explicit GCS signal
+    });
     
     // Update Microsoft UET consent if enabled
     if (config.uetConfig.enabled) {
@@ -3546,32 +3591,20 @@ function updateConsentMode(consentData) {
         window.uetq.push('consent', 'update', {
             'ad_storage': uetConsentState
         });
-        
-        // Push UET consent event to dataLayer with the exact requested format
-        window.dataLayer.push({
-            'event': 'uet_consent_update',
-            'uet_consent': {
-                'ad_storage': uetConsentState,
-                'status': consentData.status,
-                'src': 'update',
-                'asc': uetConsentState === 'granted' ? 'G' : 'D',
-                'timestamp': new Date().toISOString()
-            },
-            'location_data': locationData
-        });
     }
     
-    // Push general consent update to dataLayer
+    // Push general consent update to dataLayer with explicit GCS signal
     window.dataLayer.push({
         'event': 'cookie_consent_update',
         'consent_mode': consentStates,
-        'gcs': gcsSignal,
+        'gcs': gcsSignal, // Explicit GCS signal
         'consent_status': consentData.status,
         'consent_categories': consentData.categories,
         'timestamp': new Date().toISOString(),
         'location_data': locationData
     });
 }
+
 
 // Cookie management functions
 function setCookie(name, value, days) {
@@ -3618,7 +3651,13 @@ function loadPerformanceCookies() {
 
 // Main execution flow
 document.addEventListener('DOMContentLoaded', async function() {
-    // Check if domain is allowed
+      // Ensure location data is loaded first
+    if (!sessionStorage.getItem('locationData')) {
+        await fetchLocationData();
+    }  
+   
+
+ // Check if domain is allowed
     if (!isDomainAllowed()) {
         console.log('Cookie consent banner not shown - domain not allowed');
         return;
@@ -3697,6 +3736,3 @@ if (typeof window !== 'undefined') {
         config: config
     };
 }
-
-
-
