@@ -1,3 +1,32 @@
+const EU_COUNTRIES = [
+    'AT', // Austria
+    'BE', // Belgium
+    'BG', // Bulgaria
+    'HR', // Croatia
+    'CY', // Cyprus
+    'CZ', // Czech Republic
+    'DK', // Denmark
+    'EE', // Estonia
+    'FI', // Finland
+    'FR', // France
+    'DE', // Germany
+    'GR', // Greece
+    'HU', // Hungary
+    'IE', // Ireland
+    'IT', // Italy
+    'LV', // Latvia
+    'LT', // Lithuania
+    'LU', // Luxembourg
+    'MT', // Malta
+    'NL', // Netherlands
+    'PL', // Poland
+    'PT', // Portugal
+    'RO', // Romania
+    'SK', // Slovakia
+    'SI', // Slovenia
+    'ES', // Spain
+    'SE', // Sweden
+];
 const config = {
     // Domain restriction
     allowedDomains: ['dev-rpractice.pantheonsite.io', 'assistenzaelettrodomestici-firenze.com'],
@@ -67,14 +96,17 @@ const config = {
     },
     
     // Geo-targeting configuration
-    geoConfig: {
-        allowedCountries: [],
-        allowedRegions: [],
-        allowedCities: [],
-        blockedCountries: [],
-        blockedRegions: [],
-        blockedCities: []
-    },
+ // In your config object, update the geoConfig section:
+geoConfig: {
+    allowedCountries: [], // Only show in these countries (empty = all allowed)
+    allowedRegions: [], // Only show in these regions
+    allowedCities: [], // Only show in these cities
+    blockedCountries: [], // Never show in these countries
+    blockedRegions: [], // Never show in these regions
+    blockedCities: [], // Never show in these cities
+    euOnly: true, // NEW: Set to true to only show in EU countries
+    specificRegions: ['EU'] // NEW: Can specify 'EU' or other regions
+}
     
     // Analytics configuration
     analytics: {
@@ -1639,8 +1671,14 @@ function isDomainAllowed() {
 }
 
 // Check geo-targeting restrictions
+// Replace the existing checkGeoTargeting function with this:
 function checkGeoTargeting(geoData) {
-    // Check blocked locations first
+    // If we don't have country data, allow by default (or deny if you prefer)
+    if (!geoData || !geoData.country || geoData.country === 'Unknown') {
+        return !config.geoConfig.euOnly; // If EU-only mode, deny unknown locations
+    }
+
+    // Check blocked locations first (highest priority)
     if (config.geoConfig.blockedCountries.length > 0 && 
         config.geoConfig.blockedCountries.includes(geoData.country)) {
         return false;
@@ -1655,7 +1693,21 @@ function checkGeoTargeting(geoData) {
         config.geoConfig.blockedCities.includes(geoData.city)) {
         return false;
     }
-    
+
+    // Handle EU-only mode
+    if (config.geoConfig.euOnly) {
+        return EU_COUNTRIES.includes(geoData.country);
+    }
+
+    // Check if specific regions are specified
+    if (config.geoConfig.specificRegions.length > 0) {
+        if (config.geoConfig.specificRegions.includes('EU') && 
+            EU_COUNTRIES.includes(geoData.country)) {
+            return true;
+        }
+        return config.geoConfig.specificRegions.includes(geoData.country);
+    }
+
     // Check allowed locations (if any restrictions are set)
     if (config.geoConfig.allowedCountries.length > 0 && 
         !config.geoConfig.allowedCountries.includes(geoData.country)) {
@@ -1672,6 +1724,7 @@ function checkGeoTargeting(geoData) {
         return false;
     }
     
+    // If no restrictions, allow by default
     return true;
 }
 
@@ -3067,8 +3120,9 @@ function shouldShowBanner() {
 function initializeCookieConsent(detectedCookies, language) {
     const consentGiven = getCookie('cookie_consent');
     
-    // Check if banner should be shown based on schedule
-    const bannerShouldBeShown = shouldShowBanner();
+    // Check if banner should be shown based on geo-targeting and schedule
+    const geoAllowed = checkGeoTargeting(locationData);
+    const bannerShouldBeShown = geoAllowed && shouldShowBanner();
     
     if (!consentGiven && config.behavior.autoShow && bannerShouldBeShown) {
         setTimeout(() => {
@@ -3082,7 +3136,6 @@ function initializeCookieConsent(detectedCookies, language) {
             showFloatingButton();
         }
     }
-    
     // Explicitly apply the default language from config
     changeLanguage(config.languageConfig.defaultLanguage);
     
@@ -3689,6 +3742,13 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Fetch location data asynchronously
     await fetchLocationData();
+    
+      // Check geo-targeting before proceeding
+    const geoAllowed = checkGeoTargeting(locationData);
+    if (!geoAllowed) {
+        console.log('Cookie consent banner not shown - geo-targeting restriction');
+        return;
+    }
 
     // Scan and categorize existing cookies
     const detectedCookies = scanAndCategorizeCookies();
@@ -3752,5 +3812,3 @@ if (typeof window !== 'undefined') {
         config: config
     };
 }
-
-
