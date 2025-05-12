@@ -123,14 +123,14 @@ const config = {
     // Geo-targeting configuration
  // In your config object, update the geoConfig section:
 geoConfig: {
-    allowedCountries: [], // Only show in these countries (empty = all allowed)
+    allowedCountries: ['GB'], // Only show in these countries (empty = all allowed)
     allowedRegions: [], // Only show in these regions
     allowedCities: [], // Only show in these cities
     blockedCountries: [], // Never show in these countries
     blockedRegions: [], // Never show in these regions
     blockedCities: [], // Never show in these cities
-    euOnly: true, // NEW: Set to true to only show in EU countries
-    specificRegions: ['EU'] // NEW: Can specify 'EU' or other regions
+    euOnly: false, // NEW: Set to true to only show in EU countries
+    specificRegions: [] // NEW: Can specify 'EU' or other regions
 },
     
     // Analytics configuration
@@ -1726,11 +1726,11 @@ function checkGeoTargeting(geoData) {
 
     // Check if specific regions are specified
     if (config.geoConfig.specificRegions.length > 0) {
-        if (config.geoConfig.specificRegions.includes('EU') && 
-            EU_COUNTRIES.includes(geoData.country)) {
-            return true;
-        }
-        return config.geoConfig.specificRegions.includes(geoData.country);
+       // if (config.geoConfig.specificRegions.includes('EU') && 
+          //  EU_COUNTRIES.includes(geoData.country)) {
+           // return true;
+     //   }
+        return config.geoConfig.specificRegions.includes(geoData.region);
     }
 
     // Check allowed locations (if any restrictions are set)
