@@ -76,7 +76,7 @@ const config = {
         acceptOnScroll: false,
         acceptOnContinue: false,
         showFloatingButton: true,
-        showAdminButton: true,
+        showAdminButton: false,
         floatingButtonPosition: 'left',
         adminButtonPosition: 'left',
         bannerPosition: 'left',
